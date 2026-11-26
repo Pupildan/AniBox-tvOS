@@ -6,8 +6,8 @@ final class Session: ObservableObject {
     static let shared = Session()
     private let d = UserDefaults.standard
 
-    @Published var server: String
-    @Published var token: String
+    @Published var server: String { didSet { Creds.shared.server = server } }
+    @Published var token: String { didSet { Creds.shared.token = token } }
     @Published var username: String
     @Published var userInfo: JSON = .null
     @Published var expiredNotice = false
@@ -18,6 +18,8 @@ final class Session: ObservableObject {
         server = d.string(forKey: "server") ?? ""
         token = Keychain.get("token") ?? ""
         username = d.string(forKey: "username") ?? ""
+        Creds.shared.server = server
+        Creds.shared.token = token
     }
 
     func updateServer(_ s: String) { server = s; d.set(s, forKey: "server") }

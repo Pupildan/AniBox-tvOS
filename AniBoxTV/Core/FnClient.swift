@@ -1,5 +1,14 @@
 import Foundation
 
+/// 线程安全的当前凭据（供非主线程网络层读取）
+final class Creds: @unchecked Sendable {
+    static let shared = Creds()
+    private let lock = NSLock()
+    private var _server = "", _token = ""
+    var server: String { get { lock.lock(); defer { lock.unlock() }; return _server } set { lock.lock(); _server = newValue; lock.unlock() } }
+    var token: String { get { lock.lock(); defer { lock.unlock() }; return _token } set { lock.lock(); _token = newValue; lock.unlock() } }
+}
+
 struct FnError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -87,8 +96,8 @@ final class FnClient {
     @discardableResult
     func call(_ path: String, method: String = "GET", body: [String: Any]? = nil,
               query: [(String, String)] = [], base: String? = nil, token: String? = nil) async throws -> JSON {
-        let b = FnClient.normalize(base ?? Session.shared.server)
-        let t = token ?? Session.shared.token
+        let b = FnClient.normalize(base ?? Creds.shared.server)
+        let t = token ?? Creds.shared.token
         var lastErr: Error = FnError(message: "请求失败")
         for attempt in 0..<3 {
             if attempt > 0 { try? await Task.sleep(nanoseconds: UInt64(attempt) * 400_000_000) }
@@ -204,7 +213,7 @@ final class FnClient {
         _ = try? await call("/v/api/v1/play/record", method: "POST", body: [
             "item_guid": itemGuid, "media_guid": info["media_guid"].str, "video_guid": info["video_guid"].str,
             "audio_guid": info["audio_guid"].str, "subtitle_guid": info["subtitle_guid"].str,
-            "play_link": URL(string: Session.shared.server)?.host ?? "", "ts": Int(ts), "duration": Int(duration)])
+            "play_link": URL(string: Creds.shared.server)?.host ?? "", "ts": Int(ts), "duration": Int(duration)])
     }
     func setWatched(_ guid: String, watched: Bool) async throws {
         try await call("/v/api/v1/item/watched", method: watched ? "POST" : "DELETE", body: ["item_guid": guid])
@@ -236,17 +245,17 @@ final class FnClient {
         guard let p = path, !p.isEmpty else { return nil }
         if p.hasPrefix("http") { return URL(string: p) }
         let pp = p.hasPrefix("/") ? p : "/" + p
-        return URL(string: "\(FnClient.normalize(Session.shared.server))/v/api/v1/sys/img\(pp)?w=\(width)")
+        return URL(string: "\(FnClient.normalize(Creds.shared.server))/v/api/v1/sys/img\(pp)?w=\(width)")
     }
     func mediaURL(mediaGuid: String) -> URL? {
-        URL(string: "\(FnClient.normalize(Session.shared.server))/v/api/v1/media/range/\(mediaGuid)")
+        URL(string: "\(FnClient.normalize(Creds.shared.server))/v/api/v1/media/range/\(mediaGuid)")
     }
     func subtitleURL(_ guid: String) -> URL? {
-        URL(string: "\(FnClient.normalize(Session.shared.server))/v/api/v1/subtitle/dl/\(guid)")
+        URL(string: "\(FnClient.normalize(Creds.shared.server))/v/api/v1/subtitle/dl/\(guid)")
     }
     func download(_ url: URL) async throws -> Data {
         var r = URLRequest(url: url)
-        authHeaders(token: Session.shared.token).forEach { r.setValue($1, forHTTPHeaderField: $0) }
+        authHeaders(token: Creds.shared.token).forEach { r.setValue($1, forHTTPHeaderField: $0) }
         let path = url.path
         r.setValue(FnAuth.authx(path: path, signData: ""), forHTTPHeaderField: "Authx")
         let (d, _) = try await Net.session.data(for: r)

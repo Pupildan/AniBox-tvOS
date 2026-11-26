@@ -66,8 +66,8 @@ struct GlassButtonStyle: ButtonStyle {
 
 /// 卡片按钮：只给焦点放大+阴影，不加背景（海报卡片用）
 struct CardButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration) }
-    struct Body: View {
+    func makeBody(configuration: Configuration) -> some View { CardBody(configuration: configuration) }
+    struct CardBody: View {
         let configuration: Configuration
         @Environment(\.isFocused) var focused
         var body: some View {

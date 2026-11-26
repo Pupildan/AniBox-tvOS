@@ -16,7 +16,7 @@ actor ImageLoader {
         if let d = try? Data(contentsOf: f), let i = UIImage(data: d) { mem.setObject(i, forKey: url as NSURL); return i }
         var r = URLRequest(url: url)
         if url.path.contains("/v/api/v1/") {
-            let token = await Session.shared.token
+            let token = Creds.shared.token
             FnClient.shared.authHeaders(token: token).forEach { r.setValue($1, forHTTPHeaderField: $0) }
             r.setValue(FnAuth.authx(path: url.path, signData: ""), forHTTPHeaderField: "Authx")
         }

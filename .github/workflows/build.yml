@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: macos-15
@@ -24,8 +26,9 @@ jobs:
           xcodebuild -project AniBoxTV.xcodeproj -scheme AniBoxTV \
             -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD" || true
-          test -d build/Build/Products/Release-appletvos/AniBoxTV.app
+            build > build.log 2>&1 || true
+          grep -E "error:" build.log | sort -u | head -80 || true
+          grep -q "BUILD SUCCEEDED" build.log
       - name: Package IPA
         run: |
           mkdir -p Payload
