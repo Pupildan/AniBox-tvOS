@@ -135,7 +135,6 @@ struct DetailView: View {
         ShelfRow(title: "版本", trailing: "\(versions.count) 个文件") {
             ForEach(versions, id: \.self) { v in
                 Button {
-                    var it = d; _ = it
                     playing = (d, []); UserDefaults.standard.set(v["media_guid"].str, forKey: "ver.\(d.guid)"); showPlayer = true
                 } label: {
                     VStack(alignment: .leading, spacing: 8) {

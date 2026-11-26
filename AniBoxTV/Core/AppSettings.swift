@@ -33,6 +33,8 @@ final class AppSettings: ObservableObject {
     @AppStorage("danmakuShowBottom") var danmakuShowBottom = true
     @AppStorage("danmakuBlockWords") var danmakuBlockWords = ""
     @AppStorage("danmakuMaxPerSecond") var danmakuMaxPerSecond = 30.0
+    @AppStorage("ddpAppId") var ddpAppId = ""
+    @AppStorage("ddpAppSecret") var ddpAppSecret = ""
 
     // 元数据
     @AppStorage("tmdbKey") var tmdbKey = ""

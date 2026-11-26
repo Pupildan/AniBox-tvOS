@@ -15,6 +15,8 @@ struct PlayerView: View {
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubbing: Double?
     @FocusState private var focus: Bool
+    @State private var showDanmakuPicker = false
+    @Namespace private var panelNS
 
     enum Panel: String, CaseIterable, Identifiable { case subtitle = "字幕", audio = "音轨", danmaku = "弹幕", speed = "倍速", version = "版本", skip = "片头片尾", episodes = "选集"; var id: String { rawValue } }
 
@@ -42,20 +44,26 @@ struct PlayerView: View {
                     .task(id: t) { try? await Task.sleep(nanoseconds: 2_500_000_000); m.toast = nil }
             }
             skipButton
+            if panel == nil {
+                // 仅在无面板时存在的遥控器「捕获层」：手势只挂在这里，不会吞掉面板按钮的点按
+                Color.clear.contentShape(Rectangle())
+                    .focusable(true)
+                    .focused($focus)
+                    .onTapGesture { if let s = scrubbing { m.seek(to: s); scrubbing = nil } else { m.togglePlay() }; bump() }
+                    .onLongPressGesture(minimumDuration: 0.6) { openPanel(.subtitle) }
+                    .onMoveCommand { dir in handleMove(dir) }
+                    .onAppear { focus = true }
+            }
         }
-        .focusable(panel == nil)
-        .focused($focus)
-        .onAppear { focus = true; Task { await m.start() }; bump() }
+        .onAppear { Task { await m.start() }; bump() }
         .onDisappear { m.close() }
         .onPlayPauseCommand { m.togglePlay(); bump() }
-        .onMoveCommand { dir in handleMove(dir) }
         .onExitCommand {
-            if panel != nil { withAnimation { panel = nil }; focus = true }
+            if panel != nil { withAnimation { panel = nil }; DispatchQueue.main.async { focus = true } }
             else if showControls && scrubbing == nil && m.playing { withAnimation { showControls = false } }
             else { m.close(); dismiss() }
         }
-        .onTapGesture { if panel == nil { if let s = scrubbing { m.seek(to: s); scrubbing = nil } else { m.togglePlay() }; bump() } }
-        .onLongPressGesture(minimumDuration: 0.6) { withAnimation { panel = .subtitle } }
+        .sheet(isPresented: $showDanmakuPicker) { DanmakuPickerView(model: m) }
         .animation(.easeInOut(duration: 0.25), value: showControls)
         .animation(.spring(response: 0.35), value: panel)
     }
@@ -66,11 +74,12 @@ struct PlayerView: View {
         case .left: if showControls, scrubbing != nil { scrubbing = max(0, (scrubbing ?? m.time) - settings.seekStep * 3) } else { m.seek(by: -settings.seekStep); m.danmaku.reset() }
         case .right: if showControls, scrubbing != nil { scrubbing = min(m.duration, (scrubbing ?? m.time) + settings.seekStep * 3) } else { m.seek(by: settings.seekStep); m.danmaku.reset() }
         case .up: if showControls { scrubbing = scrubbing == nil ? m.time : nil } 
-        case .down: withAnimation { panel = .subtitle }
+        case .down: openPanel(.subtitle)
         @unknown default: break
         }
         bump()
     }
+    func openPanel(_ p: Panel) { focus = false; withAnimation { panel = p } }
     func bump() {
         withAnimation { showControls = true }
         hideTask?.cancel()
@@ -146,6 +155,7 @@ struct PlayerView: View {
                 ForEach(Panel.allCases) { x in
                     if x != .version || m.versions.count > 1, x != .episodes || !m.playlist.isEmpty {
                         Chip(text: x.rawValue, selected: x == p) { panel = x }
+                            .prefersDefaultFocus(x == p, in: panelNS)
                     }
                 }
             }
@@ -158,6 +168,7 @@ struct PlayerView: View {
         }
         .padding(40).glass(40).padding(50)
         .frame(maxHeight: .infinity, alignment: .bottom)
+        .focusScope(panelNS)
     }
 
     @ViewBuilder func panelContent(_ p: Panel) -> some View {
@@ -183,6 +194,7 @@ struct PlayerView: View {
         case .danmaku:
             opt(settings.danmakuEnabled ? "关闭弹幕" : "开启弹幕") { settings.danmakuEnabled.toggle() }
             opt("重新匹配") { Task { await m.loadDanmaku() } }
+            opt("手动选择弹幕") { showDanmakuPicker = true }
             opt("弹幕提前 1 秒") { m.danmaku.offset += 1; m.danmaku.reset() }
             opt("弹幕延后 1 秒") { m.danmaku.offset -= 1; m.danmaku.reset() }
             opt("透明度 \(Int(settings.danmakuOpacity * 100))%") { settings.danmakuOpacity = settings.danmakuOpacity <= 0.3 ? 1 : settings.danmakuOpacity - 0.15 }

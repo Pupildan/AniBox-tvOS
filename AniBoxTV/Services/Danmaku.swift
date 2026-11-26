@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 struct DanmakuItem: Hashable {
     enum Mode { case scroll, top, bottom }
@@ -16,6 +17,37 @@ enum DanmakuService {
         AppSettings.shared.danmakuServers.split(whereSeparator: { $0 == "\n" || $0 == "," })
             .map { $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
             .filter { $0.hasPrefix("http") }
+    }
+
+    // 弹弹play 官方开放平台：X-AppId + X-Signature=base64(sha256(AppId+Timestamp+Path+AppSecret))
+    static var ddpEnabled: Bool { !AppSettings.shared.ddpAppId.isEmpty && !AppSettings.shared.ddpAppSecret.isEmpty }
+    static func ddpGet(_ pathWithQuery: String) async throws -> JSON {
+        let id = AppSettings.shared.ddpAppId, sec = AppSettings.shared.ddpAppSecret
+        let path = String(pathWithQuery.split(separator: "?", maxSplits: 1).first ?? "")
+        let ts = String(Int(Date().timeIntervalSince1970))
+        let sig = Data(SHA256.hash(data: Data((id + ts + path + sec).utf8))).base64EncodedString()
+        var r = URLRequest(url: URL(string: "https://api.dandanplay.net" + pathWithQuery)!)
+        r.setValue(id, forHTTPHeaderField: "X-AppId"); r.setValue(ts, forHTTPHeaderField: "X-Timestamp")
+        r.setValue(sig, forHTTPHeaderField: "X-Signature"); r.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (d, resp) = try await Net.plain.data(for: r)
+        if let h = resp as? HTTPURLResponse, h.statusCode >= 400 { throw FnError(message: "弹弹play HTTP \(h.statusCode)") }
+        return JSON.parse(d)
+    }
+
+    enum Source: String, CaseIterable, Identifiable { case selfHosted = "自建源", dandanplay = "弹弹play"; var id: String { rawValue } }
+    static var availableSources: [Source] { (bases.isEmpty ? [] : [.selfHosted]) + (ddpEnabled ? [.dandanplay] : []) }
+
+    static func call(_ src: Source, _ path: String) async throws -> JSON { src == .dandanplay ? try await ddpGet(path) : try await get(path) }
+    static func search(_ src: Source, _ keyword: String) async throws -> [JSON] {
+        let k = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? keyword
+        let d = try await call(src, "/api/v2/search/anime?keyword=\(k)")
+        return d["animes"].array
+    }
+    static func episodes(_ src: Source, animeId: String) async throws -> [JSON] {
+        try await call(src, "/api/v2/bangumi/\(animeId)")["bangumi"]["episodes"].array
+    }
+    static func comments(_ src: Source, episodeId: String) async throws -> [DanmakuItem] {
+        parse(try await call(src, "/api/v2/comment/\(episodeId)?withRelated=true&chConvert=1")["comments"].array)
     }
 
     static func get(_ path: String) async throws -> JSON {
@@ -59,15 +91,31 @@ enum DanmakuService {
 
     /// 自动匹配：按标题搜番剧，再按集号挑选
     static func autoMatch(title: String, episode: Int) async -> (label: String, items: [DanmakuItem])? {
-        guard !bases.isEmpty else { return nil }
+        for src in availableSources {
+            if let r = await autoMatch(src, title: title, episode: episode), !r.items.isEmpty { return r }
+        }
+        return nil
+    }
+    static func autoMatch(_ src: Source, title: String, episode: Int) async -> (label: String, items: [DanmakuItem])? {
         let clean = title.replacingOccurrences(of: #"\s*(第.季|Season\s*\d+)$"#, with: "", options: .regularExpression)
-        guard let animes = try? await searchAnime(clean), let a = animes.first(where: { $0["animeTitle"].str.contains(clean) }) ?? animes.first else { return nil }
-        guard let eps = try? await episodes(animeId: a["animeId"].str ?? a["bangumiId"].str), !eps.isEmpty else { return nil }
+        guard let animes = try? await search(src, clean), let a = animes.first(where: { $0["animeTitle"].str.contains(clean) }) ?? animes.first else { return nil }
+        guard let eps = try? await episodes(src, animeId: a["animeId"].string ?? a["bangumiId"].str), !eps.isEmpty else { return nil }
         let idx = max(0, min(eps.count - 1, (episode > 0 ? episode : 1) - 1))
         let ep = eps.first(where: { $0["episodeNumber"].int == episode }) ?? eps[idx]
-        guard let items = try? await comments(episodeId: ep["episodeId"].str) else { return nil }
-        return ("\(a["animeTitle"].str) · \(ep["episodeTitle"].str)", items)
+        guard let items = try? await comments(src, episodeId: ep["episodeId"].str) else { return nil }
+        return ("\(src.rawValue) · \(a["animeTitle"].str) · \(ep["episodeTitle"].str)", items)
     }
+}
+
+/// 手动选择的记忆：同一部剧记住番剧 id，之后按集号自动取
+enum DanmakuMemory {
+    static func key(_ series: String) -> String { "dmmem." + series }
+    static func get(_ series: String) -> (src: String, animeId: String, offset: Int)? {
+        guard let s = UserDefaults.standard.string(forKey: key(series)) else { return nil }
+        let p = s.split(separator: "|").map(String.init)
+        return p.count == 3 ? (p[0], p[1], Int(p[2]) ?? 0) : nil
+    }
+    static func set(_ series: String, src: String, animeId: String, offset: Int) { UserDefaults.standard.set("\(src)|\(animeId)|\(offset)", forKey: key(series)) }
 }
 
 /// 弹幕渲染层：TimelineView 每帧绘制，轨道分配避免重叠

@@ -133,7 +133,8 @@ enum Bangumi {
             return s
         }
         let best = hits.max { score($0) < score($1) }!
-        guard var m = (try? await subject(best["id"].str)).map(toMeta) ?? Optional(toMeta(best)) else { return nil }
+        var m = toMeta(best)
+        if let full = try? await subject(best["id"].str) { m = toMeta(full) }
         let id = m.id
         async let ch = characters(id)
         async let ps = persons(id)

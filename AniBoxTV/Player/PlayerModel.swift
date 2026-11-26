@@ -38,6 +38,7 @@ final class PlayerModel: ObservableObject {
         engine.rate = speed
     }
 
+    var seriesKey: String { item.tvTitle.isEmpty ? item.guid : item.tvTitle }
     var index: Int? { playlist.firstIndex { $0.guid == item.guid } }
     var hasNext: Bool { (index.map { $0 + 1 < playlist.count }) ?? false }
     var hasPrev: Bool { (index.map { $0 > 0 }) ?? false }
@@ -107,6 +108,13 @@ final class PlayerModel: ObservableObject {
     func loadDanmaku() async {
         guard AppSettings.shared.danmakuEnabled else { return }
         let name = item.tvTitle.isEmpty ? item.title : item.tvTitle
+        if let mem = DanmakuMemory.get(seriesKey), let src = DanmakuService.Source(rawValue: mem.src),
+           let eps = try? await DanmakuService.episodes(src, animeId: mem.animeId), !eps.isEmpty {
+            let idx = max(0, min(eps.count - 1, item.episode - 1 + mem.offset))
+            if let list = try? await DanmakuService.comments(src, episodeId: eps[idx]["episodeId"].str) {
+                danmaku.load(list, label: "\(src.rawValue) · \(eps[idx]["episodeTitle"].str)"); toast = "已加载弹幕 \(list.count) 条"; return
+            }
+        }
         if let r = await DanmakuService.autoMatch(title: name, episode: item.episode) {
             danmaku.load(r.items, label: r.label)
             toast = "已加载弹幕 \(r.items.count) 条"

@@ -37,7 +37,9 @@ struct SettingsView: View {
                     }
                     Section("弹幕") {
                         Toggle("启用弹幕", isOn: $s.danmakuEnabled)
-                        TextField("弹幕源地址（danmu_api，多个用逗号分隔，含 TOKEN 路径）", text: $s.danmakuServers)
+                        TextField("自建弹幕源地址（danmu_api，多个用逗号分隔，含 TOKEN 路径）", text: $s.danmakuServers)
+                        TextField("弹弹play AppId（在 doc.dandanplay.com/open 申请）", text: $s.ddpAppId)
+                        SecureField("弹弹play AppSecret", text: $s.ddpAppSecret)
                         Picker("透明度", selection: $s.danmakuOpacity) { ForEach([0.4, 0.6, 0.85, 1.0], id: \.self) { Text("\(Int($0 * 100))%").tag($0) } }
                         Picker("字号", selection: $s.danmakuFontSize) { ForEach([28.0, 34.0, 38.0, 46.0, 56.0], id: \.self) { Text("\(Int($0))").tag($0) } }
                         Picker("速度", selection: $s.danmakuSpeed) { ForEach([0.5, 0.75, 1.0, 1.5, 2.0], id: \.self) { Text(String(format: "%.2gx", $0)).tag($0) } }
