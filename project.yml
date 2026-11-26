@@ -1,0 +1,44 @@
+name: AniBoxTV
+options:
+  bundleIdPrefix: com.anibox
+  deploymentTarget:
+    tvOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+packages:
+  MPVKit:
+    url: https://github.com/mpvkit/MPVKit
+    from: "0.40.0"
+targets:
+  AniBoxTV:
+    type: application
+    platform: tvOS
+    sources: [AniBoxTV]
+    dependencies:
+      - package: MPVKit
+        product: MPVKit
+    info:
+      path: AniBoxTV/Info.plist
+      properties:
+        CFBundleDisplayName: AniBox
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIUserInterfaceStyle: Dark
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: "连接局域网内的飞牛 NAS"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.anibox.tv
+        TARGETED_DEVICE_FAMILY: "3"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
